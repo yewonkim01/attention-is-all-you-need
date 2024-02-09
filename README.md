@@ -100,3 +100,13 @@ python train.py -data_pkl ./bpe_deen/bpe_vocab.pkl -train_path ./bpe_deen/deen-t
 - The byte pair encoding parts are borrowed from [subword-nmt](https://github.com/rsennrich/subword-nmt/).
 - The project structure, some scripts and the dataset preprocessing steps are heavily borrowed from [OpenNMT/OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py).
 - Thanks for the suggestions from @srush, @iamalbert, @Zessay, @JulesGM, @ZiJianZhao, and @huanghoujing.
+
+
+1회차
+modules -> sublayers -> layers -> models
+
+2회차
+learn_bpe -> apply_bpe -> preprocess
+
+3회차
+optim-> train -> translator -> translate
