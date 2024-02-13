@@ -27,6 +27,9 @@ class BPE(object):
 
     def __init__(self, codes, merges=-1, separator='@@', vocab=None, glossaries=None):
 
+        #codes: 파일 객체
+
+        #codes가 가리키는 파일에서 파일 포인터를 파일 시작부분으로 이동시킴
         codes.seek(0)
         offset=1
 
@@ -39,24 +42,34 @@ class BPE(object):
             self.version = (0, 1)
             codes.seek(0)
 
+        
+        #enumerate(codes) : 각 줄 인덱스와 함께 파일 객체의 한 줄 한 줄씩 읽어올 수 있음
+            #'\r\n': 커서를 앞으로 보내고 엔터치기
+        #[(a,b), (c,d),,,] : 한 문장 속 단어들의 공백 기준 split
+            
+            #merges????
         self.bpe_codes = [tuple(item.strip('\r\n ').split(' ')) for (n, item) in enumerate(codes) if (n < merges or merges == -1)]
 
+        #한 문장에서 각 단어별로
         for i, item in enumerate(self.bpe_codes):
+            #반드시 두 개의 subword unit으로 이루어져 있어야 함?
             if len(item) != 2:
                 sys.stderr.write('Error: invalid line {0} in BPE codes file: {1}\n'.format(i+offset, ' '.join(item)))
                 sys.stderr.write('The line should exist of exactly two subword units, separated by whitespace\n')
                 sys.exit(1)
 
         # some hacking to deal with duplicates (only consider first instance)
+        #{(a,b): 5, (c,d):4 ,,,} ??
         self.bpe_codes = dict([(code,i) for (i,code) in reversed(list(enumerate(self.bpe_codes)))])
 
+        #{ab: (a,b)}
         self.bpe_codes_reverse = dict([(pair[0] + pair[1], pair) for pair,i in self.bpe_codes.items()])
 
         self.separator = separator
 
         self.vocab = vocab
 
-        self.glossaries = glossaries if glossaries else []
+        self.glossaries = glossaries if glossaries else [] #분리되지 않을 용어? 모르겠음
 
         self.glossaries_regex = re.compile('^({})$'.format('|'.join(glossaries))) if glossaries else None
 
@@ -67,13 +80,17 @@ class BPE(object):
 
         out = ""
 
+        #맨 왼쪽 '\r\n '
         leading_whitespace = len(line)-len(line.lstrip('\r\n '))
+        #앞부분에 공백있었으면 out에 추가
         if leading_whitespace:
             out += line[:leading_whitespace]
 
-        out += self.segment(line, dropout)
 
+        out += self.segment(line, dropout)
+        #뒷부분 공백 제거
         trailing_whitespace = len(line)-len(line.rstrip('\r\n '))
+        #뒷부분 공백 있었으면 out에 추가
         if trailing_whitespace and trailing_whitespace != len(line):
             out += line[-trailing_whitespace:]
 
@@ -85,7 +102,9 @@ class BPE(object):
         return ' '.join(segments)
 
     def segment_tokens(self, tokens, dropout=0):
+        #BPE Encoding을 사용해서 segment화
         """segment a sequence of tokens with BPE encoding"""
+
         output = []
         for word in tokens:
             # eliminate double spaces
@@ -118,26 +137,31 @@ class BPE(object):
 def encode(orig, bpe_codes, bpe_codes_reverse, vocab, separator, version, cache, glossaries_regex=None, dropout=0):
     """Encode word based on list of BPE merge operations, which are applied consecutively
     """
-
+    #캐시에 단어 있으면 캐시 반환
     if not dropout and orig in cache:
         return cache[orig]
-
+    
+    #glossaries에 정의된 용어랑 match되면 원래 단어 반환
     if glossaries_regex and glossaries_regex.match(orig):
         cache[orig] = (orig,)
         return (orig,)
-
+    
+    #단어 한 글자면 그대로 반환
     if len(orig) == 1:
         return orig
-
+    
+    #version에 따라서 BPE Encoding 진행
     if version == (0, 1):
-        word = list(orig) + ['</w>']
+        word = list(orig) + ['</w>']  #character 단위로 다 segment 하고 끝에 <\w>추가
     elif version == (0, 2): # more consistent handling of word-final segments
+        #마지막 단어 분리하고 </w> 추가
         word = list(orig[:-1]) + [orig[-1] + '</w>']
     else:
         raise NotImplementedError
 
+    #단어 1개만 남을 때까지
     while len(word) > 1:
-
+        
         # get list of symbol pairs; optionally apply dropout
         pairs = [(bpe_codes[pair],i,pair) for (i,pair) in enumerate(zip(word, word[1:])) if (not dropout or random.random() > dropout) and pair in bpe_codes]
 
@@ -148,16 +172,20 @@ def encode(orig, bpe_codes, bpe_codes_reverse, vocab, separator, version, cache,
         bigram = min(pairs)[2]
 
         # find start position of all pairs that we want to merge
+        #merge하고자 하는 bigram과 같은 pair 모두 찾기
         positions = [i for (rank,i,pair) in pairs if pair == bigram]
 
         i = 0
         new_word = []
+        #합치기
         bigram = ''.join(bigram)
         for j in positions:
             # merges are invalid if they start before current position. This can happen if there are overlapping pairs: (x x x -> xx x)
             if j < i:
                 continue
+            #merge되기 전 이전 단어들 ('i','c','e')
             new_word.extend(word[i:j]) # all symbols before merged pair
+            #merge된 애들 ('al')
             new_word.append(bigram) # merged pair
             i = j+2 # continue after merged pair
         new_word.extend(word[i:]) # add all symbols until end of word
