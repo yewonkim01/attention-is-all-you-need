@@ -22,9 +22,13 @@ import re
 import warnings
 import random
 
+"""
+bpe_init_ -> process_line -> recursive_split -> check_vocab_and_split -> encode -> isolate_glossary -> segment_tokens -> segment
+"""
+
 
 class BPE(object):
-
+                                        # '@@'는 subunit임 구분자? close@@d ?? 
     def __init__(self, codes, merges=-1, separator='@@', vocab=None, glossaries=None):
 
         #codes: 파일 객체
@@ -211,6 +215,7 @@ def recursive_split(segment, bpe_codes, vocab, separator, final=False):
     try:
         if final:
             left, right = bpe_codes[segment + '</w>']
+            #'</w>' 제외해줘야하니까
             right = right[:-4]
         else:
             left, right = bpe_codes[segment]
@@ -218,7 +223,9 @@ def recursive_split(segment, bpe_codes, vocab, separator, final=False):
         #sys.stderr.write('cannot split {0} further.\n'.format(segment))
         yield segment
         return
-
+    
+    # vocab에는 seperator가 추가된 애들이 있는건가?
+    # lowest = low + est // vocab에 있는 subunit들이 나올 때까지 split 반복
     if left + separator in vocab:
         yield left
     else:
@@ -237,14 +244,17 @@ def check_vocab_and_split(orig, bpe_codes, vocab, separator):
 
     out = []
 
+    #각 분할된 segment가 vocab에 있는지 확인하고, vocab에 속하지 않는 segment들은 다시 더 작은 segment로 분할
     for segment in orig[:-1]:
         if segment + separator in vocab:
             out.append(segment)
         else:
             #sys.stderr.write('OOV: {0}\n'.format(segment))
+            #속하지 않으면 더 작게 분할
             for item in recursive_split(segment, bpe_codes, vocab, separator, False):
                 out.append(item)
 
+    #마지막 글자는 따로 처리해줘야함
     segment = orig[-1]
     if segment in vocab:
         out.append(segment)
@@ -257,6 +267,7 @@ def check_vocab_and_split(orig, bpe_codes, vocab, separator):
 
 
 def read_vocabulary(vocab_file, threshold):
+    #vocabulary 읽는 함수 -> 어디에서도 안쓰임
     """read vocabulary file produced by get_vocab.py, and filter according to frequency threshold.
     """
 
@@ -265,6 +276,7 @@ def read_vocabulary(vocab_file, threshold):
     for line in vocab_file:
         word, freq = line.strip('\r\n ').split(' ')
         freq = int(freq)
+        #threshold가 없거나 threshold보다 빈도수가 큰 단어들만 vocab에 저장
         if threshold == None or freq >= threshold:
             vocabulary.add(word)
 
@@ -280,10 +292,17 @@ def isolate_glossary(word, glossary):
         ['1934', 'USA', 'B', 'USA']
     """
     # regex equivalent of (if word == glossary or glossary not in word)
+
+    #분할하면 안되는 용어 glossary를 만나면 분리
+    #glossary없으면 그대로 반환
     if re.match('^'+glossary+'$', word) or not re.search(glossary, word):
         return [word]
+    #있을 경우 처리
     else:
+        #glossary 기준으로 split
         segments = re.split(r'({})'.format(glossary), word)
         segments, ending = segments[:-1], segments[-1]
+        #빈 문자열 filter
         segments = list(filter(None, segments)) # Remove empty strings in regex group.
+        #뒤에 오는 부분은 따로 추가
         return segments + [ending.strip('\r\n ')] if ending != '' else segments
