@@ -114,3 +114,7 @@ optim-> train -> translator -> translate
 =======
 # attention-is-all-you-need
 >>>>>>> 46abe553bc96d491d9cae46d6b0335ced12a59e7
+
+
+
+// -> //// replace 이유

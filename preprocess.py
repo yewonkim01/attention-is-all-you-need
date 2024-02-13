@@ -134,6 +134,8 @@ def compile_files(raw_dir, raw_files, prefix):
                 assert cntr == 0, 'Number of lines in two files are inconsistent.'
     return src_fpath, trg_fpath
 
+"""encode files!!!!
+"""
 
 def encode_file(bpe, in_file, out_file):
     sys.stderr.write(f"Read raw content from {in_file} and \n"\
@@ -142,6 +144,9 @@ def encode_file(bpe, in_file, out_file):
     with codecs.open(in_file, encoding='utf-8') as in_f:
         with codecs.open(out_file, 'w', encoding='utf-8') as out_f:
             for line in in_f:
+                """
+                apply_bpe - process_line() -> 공백 유지???
+                """
                 out_f.write(bpe.process_line(line))
 
 
@@ -158,6 +163,7 @@ def encode_files(bpe, src_in_file, trg_in_file, data_dir, prefix):
 
 
 def main():
+    #argparse: 인자를 파싱(주어진 데이터를 해석하고 원하는 형식으로 변환)할 때 사용하는 라이브러리
     parser = argparse.ArgumentParser()
     parser.add_argument('-raw_dir', required=True)
     parser.add_argument('-data_dir', required=True)
@@ -175,6 +181,9 @@ def main():
         '--separator', type=str, default='@@', metavar='STR',
         help="Separator between non-final subword units (default: '%(default)s'))")
     parser.add_argument('--total-symbols', '-t', action="store_true")
+    #opt: 파싱된 명령줄 옵션들의 값을 속성을 가지고 있는 파이썬 객체
+    #     -> opt로 명령줄 옵션들에 opt. 으로 쉽게 접근할 수 있음
+    #     parser.parge_args(): 명령줄에서 전달된 인수들을 해석하고 파이썬 객체로 변환
     opt = parser.parse_args()
 
     # Create folder if needed.
@@ -195,11 +204,18 @@ def main():
     opt.codes = os.path.join(opt.data_dir, opt.codes)
     if not os.path.isfile(opt.codes):
         sys.stderr.write(f"Collect codes from training data and save to {opt.codes}.\n")
+        """
+        여기서 bpe method 사용해서 bpe 사전 만듦.
+        """
         learn_bpe(raw_train['src'] + raw_train['trg'], opt.codes, opt.symbols, opt.min_frequency, True)
     sys.stderr.write(f"BPE codes prepared.\n")
 
+    """
+    여기서 진짜 단어들 encoding 시작...
+    """
     sys.stderr.write(f"Build up the tokenizer.\n")
     with codecs.open(opt.codes, encoding='utf-8') as codes: 
+        #opt.codes에는 bpe가 적용된 사전들이 있을 것?
         bpe = BPE(codes, separator=opt.separator)
 
     sys.stderr.write(f"Encoding ...\n")

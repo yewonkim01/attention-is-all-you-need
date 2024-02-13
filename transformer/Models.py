@@ -208,7 +208,7 @@ class Transformer(nn.Module):
             #출력단어의 단어 임베딩 가중치와 디코더의 last layer의 가중치 공유 -> 모델이 효과적으로 문장생성한다고 함
             self.trg_word_prj.weight = self.decoder.trg_word_emb.weight
 
-        if emb_src_trg_weight_sharing:
+        if emb_src_tr_weight_sharing:
             #이번에는 인코더의 input source임베딩과 타겟 단어 임베딩 가중치 공유 -> 인코더와 디코더 사이의 임베딩 공유를 하면 일반화된다고 함
             self.encoder.src_word_emb.weight = self.decoder.trg_word_emb.weight
 
@@ -216,7 +216,7 @@ class Transformer(nn.Module):
     def forward(self, src_seq, trg_seq):
         #패딩된 idx에 따라서 마스킹(패딩된 위치는 연산 안하게)
         src_mask = get_pad_mask(src_seq, self.src_pad_idx)
-        #target 디코더에서는 두개 다 고려해야함
+        #target 디코더에서는 두 개 다 고려해야함
         trg_mask = get_pad_mask(trg_seq, self.trg_pad_idx) & get_subsequent_mask(trg_seq)
 
         #encoder/decoder output 가져와서 계산
