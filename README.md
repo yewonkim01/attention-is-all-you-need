@@ -1,4 +1,14 @@
-<<<<<<< HEAD
+```
+1회차
+modules -> sublayers -> layers -> models
+
+2회차
+learn_bpe -> apply_bpe -> preprocess
+
+3회차
+optim-> train -> translator -> translate
+```
+
 # Attention is all you need: A Pytorch Implementation
 
 This is a PyTorch implementation of the Transformer model in "[Attention is All You Need](https://arxiv.org/abs/1706.03762)" (Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin, arxiv, 2017). 
@@ -103,18 +113,4 @@ python train.py -data_pkl ./bpe_deen/bpe_vocab.pkl -train_path ./bpe_deen/deen-t
 - Thanks for the suggestions from @srush, @iamalbert, @Zessay, @JulesGM, @ZiJianZhao, and @huanghoujing.
 
 
-1회차
-modules -> sublayers -> layers -> models
 
-2회차
-learn_bpe -> apply_bpe -> preprocess
-
-3회차
-optim-> train -> translator -> translate
-=======
-# attention-is-all-you-need
->>>>>>> 46abe553bc96d491d9cae46d6b0335ced12a59e7
-
-
-
-// -> //// replace 이유
