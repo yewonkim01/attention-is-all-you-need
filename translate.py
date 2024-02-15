@@ -58,15 +58,19 @@ def main():
 
     parser.add_argument('-model', required=True,
                         help='Path to model weight file')
-    #-data_pkl에는 source의 vocab와 target의 vocab이 존재
+    #-data_pkl은 데이터 pickle파일: source의 vocab와 target의 vocab이 존재
     #eng -> kor 이면 source에는 eng voccab / target에는 kor vocab
     parser.add_argument('-data_pkl', required=True,
                         help='Pickle file with both instances and vocabulary.')
+    #모델의 예측결과 저장할 파일 경로 입력받기
     parser.add_argument('-output', default='pred.txt',
                         help="""Path to output the predictions (each line will
                         be the decoded sequence""")
+    #translator에서 사용하는 beam search 크기 설정
     parser.add_argument('-beam_size', type=int, default=5)
+    #생성될 sequence의 최대 길이 설정(기본값은 100으로 함)
     parser.add_argument('-max_seq_len', type=int, default=100)
+    #'cuda'를 사용할지 여부에 대한 입력
     parser.add_argument('-no_cuda', action='store_true')
 
     # TODO: Translate bpe encoded files 
@@ -102,11 +106,13 @@ def main():
     opt.trg_bos_idx = TRG.vocab.stoi[Constants.BOS_WORD]
     # target 문장 끝을 나타내는 index
     opt.trg_eos_idx = TRG.vocab.stoi[Constants.EOS_WORD]
-
+    #test데이터 준비
     test_loader = Dataset(examples=data['test'], fields={'src': SRC, 'trg': TRG})
     
+    #'cuda'가 사용하면 'cuda'를, cpu 사용해야한다면 cpu를 설정하는 device 변수 정의
     device = torch.device('cuda' if opt.cuda else 'cpu')
 
+    #translator 모듈에서 정의한 translator 모델 불러오기
     translator = Translator(
         model=load_model(opt, device),
         beam_size=opt.beam_size,
@@ -125,7 +131,7 @@ def main():
             #vocab.stoi.get(a,b) : a(단어)를 인덱스로 변환, vocab에 없으면 unk_idx로 변환
             src_seq = [SRC.vocab.stoi.get(word, unk_idx) for word in example.src]
 
-            """ translator.translate_sentence()가 번역하는 중 ~~"""
+            """ translator.translate_sentence()가 번역하는 중"""
             pred_seq = translator.translate_sentence(torch.LongTensor([src_seq]).to(device))
 
             #itos : integer to string : 예측된 타겟 단어 인덱스들을 단어로 변환
