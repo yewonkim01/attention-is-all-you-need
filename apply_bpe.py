@@ -23,15 +23,23 @@ import warnings
 import random
 
 """
+BPE(Byte-Pair Encoding)
+출현 빈도수가 가장 높은 Byte쌍(연속적인 두개의 알파벳?)을 1 byte로 replace하는 data compression 방법
+출현 빈도수가 가장 높은 token들을 merge해가면서 최종 token을 만들어내는 방식
+"""
+
+"""
+순서는
 bpe_init_ -> process_line -> recursive_split -> check_vocab_and_split -> encode -> isolate_glossary -> segment_tokens -> segment
 """
 
-
 class BPE(object):
-                                        # '@@'는 subunit임 구분자? close@@d ?? 
+                                        
     def __init__(self, codes, merges=-1, separator='@@', vocab=None, glossaries=None):
-
         #codes: 파일 객체
+        #merges: 병합횟수 : -1로 설정하면 모든 가능한 subword unit을 생성하여 단어를 분리시킨다고 함
+        #seperator: subword끼리 merge했을 때 구분할 수 있는 구분자 '@@'사용: subword a와 b가 결합했을 때 a@@b로
+        #gloassaries: BPE를 통해 subword unit으로 분리시킬 때 분리되지 않아야할 용어들
 
         #codes가 가리키는 파일에서 파일 포인터를 파일 시작부분으로 이동시킴
         codes.seek(0)
@@ -39,44 +47,49 @@ class BPE(object):
 
         # check version information
         firstline = codes.readline()
+        #firstline이 #version으로 시작하면 버전정보 출력하고
         if firstline.startswith('#version:'):
+            #version 정보를 파싱하여 tuple형태로 저장
             self.version = tuple([int(x) for x in re.sub(r'(\.0+)*$','', firstline.split()[-1]).split(".")])
             offset += 1
         else:
+            #version 정보가 없으면 버전 추가
             self.version = (0, 1)
+            #codes가 가리키는 파일에서 파일 포인터를 파일 시작부분으로 이동시킴
             codes.seek(0)
 
         
-        #enumerate(codes) : 각 줄 인덱스와 함께 파일 객체의 한 줄 한 줄씩 읽어올 수 있음
+        #enumerate(codes) : 파일객체도 enumerate 사용해서 각 줄 인덱스와 함께 파일 객체의 한 줄 한 줄씩 읽어올 수 있음
             #'\r\n': 커서를 앞으로 보내고 엔터치기
         #[(a,b), (c,d),,,] : 한 문장 속 단어들의 공백 기준 split
-            
-            #merges????
+        #파일에서 한 줄씩 읽어와서 처리n < merges or merges == -1 일 때 적용: 모든 코드를 파싱하거나 현재 읽은 줄 인덱스가 merges보다 작을 때
         self.bpe_codes = [tuple(item.strip('\r\n ').split(' ')) for (n, item) in enumerate(codes) if (n < merges or merges == -1)]
 
-        #한 문장에서 각 단어별로
+        #각 bpe 코드가 두 개의 subword unit으로 이루어져있는지 검사
         for i, item in enumerate(self.bpe_codes):
-            #반드시 두 개의 subword unit으로 이루어져 있어야 함?
+            #반드시 두 개의 subword unit으로 이루어져 있는 파일객체이므로 아니라면 error 발생시킴
             if len(item) != 2:
                 sys.stderr.write('Error: invalid line {0} in BPE codes file: {1}\n'.format(i+offset, ' '.join(item)))
                 sys.stderr.write('The line should exist of exactly two subword units, separated by whitespace\n')
                 sys.exit(1)
 
         # some hacking to deal with duplicates (only consider first instance)
-        #{(a,b): 5, (c,d):4 ,,,} ??
+        # 중복된 bpe 코드를 여러번 연산하는 것은 비효율적이므로
+        # reversed 하는 이유?
         self.bpe_codes = dict([(code,i) for (i,code) in reversed(list(enumerate(self.bpe_codes)))])
 
-        #{ab: (a,b)}
+        #selg.bpe_codes의(pair[0] + pair[1], pair)을 key로 사용하는 딕셔너리 
         self.bpe_codes_reverse = dict([(pair[0] + pair[1], pair) for pair,i in self.bpe_codes.items()])
 
         self.separator = separator
 
         self.vocab = vocab
 
-        self.glossaries = glossaries if glossaries else [] #분리되지 않을 용어? 모르겠음
-
+        #glossaries 처리, 주어지지 않았으면 빈 리스트 반환
+        self.glossaries = glossaries if glossaries else [] 
+        #glossaries 각 항목을 ^문자$ 패턴으로 리스트 각 항목을 |로 연결하여 regex 변환
         self.glossaries_regex = re.compile('^({})$'.format('|'.join(glossaries))) if glossaries else None
-
+        #중복 계산을 피하기 위한 cache, 밑에서 if문으로 이미 연산한 건 넘어감
         self.cache = {}
 
     def process_line(self, line, dropout=0):
@@ -97,12 +110,14 @@ class BPE(object):
         #뒷부분 공백 있었으면 out에 추가
         if trailing_whitespace and trailing_whitespace != len(line):
             out += line[-trailing_whitespace:]
-
+        #공백이 모두 유지된 output이 반환된
         return out
 
     def segment(self, sentence, dropout=0):
+        #입력문장을 공백 기준으로 split 시켜서 토큰들을 segment화
         """segment single sentence (whitespace-tokenized string) with BPE encoding"""
         segments = self.segment_tokens(sentence.strip('\r\n ').split(' '), dropout)
+        #공백으로 join 시켜서 이어붙임
         return ' '.join(segments)
 
     def segment_tokens(self, tokens, dropout=0):
@@ -115,6 +130,7 @@ class BPE(object):
             if not word:
                 continue
             new_word = [out for segment in self._isolate_glossaries(word)
+                        #여기서 BPE class의 encode를 사용해서 subword unit으로 분리
                         for out in encode(segment,
                                           self.bpe_codes,
                                           self.bpe_codes_reverse,
@@ -124,15 +140,16 @@ class BPE(object):
                                           self.cache,
                                           self.glossaries_regex,
                                           dropout)]
-
+            #새로운 단어 만들어졌으면 self.seperator @@를 추가해서 구분해줌
             for item in new_word[:-1]:
                 output.append(item + self.separator)
             output.append(new_word[-1])
 
         return output
-
+    #주어진 단어에서 glossaries는 분리해야함: 밑 isolate_glossart 이용
     def _isolate_glossaries(self, word):
         word_segments = [word]
+        #self.gloassaries(분리되지 않을 용어를 담은 리스트)에서 순회하면서 isolate_glossary() 적용
         for gloss in self.glossaries:
             word_segments = [out_segments for segment in word_segments
                                  for out_segments in isolate_glossary(segment, gloss)]
@@ -196,26 +213,33 @@ def encode(orig, bpe_codes, bpe_codes_reverse, vocab, separator, version, cache,
         word = new_word
 
     # don't print end-of-word symbols
+    #단어끝을 나타내는 나타내는 </w>이 있으면 마지막 문자 제거
     if word[-1] == '</w>':
         word = word[:-1]
+    #단어 끝에 </w>가 중복으로 있을 경우를 고려한 것
     elif word[-1].endswith('</w>'):
         word[-1] = word[-1][:-4]
 
+    #단어를 tuple 형태로 변환
     word = tuple(word)
     if vocab:
+        #단어가 vocab에 있는지 확인, 있으면 그 단어 bpe 코드로 segmet
         word = check_vocab_and_split(word, bpe_codes_reverse, vocab, separator)
 
     cache[orig] = word
     return word
 
+
 def recursive_split(segment, bpe_codes, vocab, separator, final=False):
     """Recursively split segment into smaller units (by reversing BPE merges)
     until all units are either in-vocabulary, or cannot be split futher."""
+    #final은 각 segmet 끝에 </w>가 붙어있는지 여부를 나타내는 변수인 것 같음
 
     try:
+        #final이 True인 경우에는 </w>가 뒤에 붙은 bpe 코드 찾기
         if final:
             left, right = bpe_codes[segment + '</w>']
-            #'</w>' 제외해줘야하니까
+            #'</w>' 제외해줘야하니까 right에서 제거
             right = right[:-4]
         else:
             left, right = bpe_codes[segment]
@@ -224,14 +248,17 @@ def recursive_split(segment, bpe_codes, vocab, separator, final=False):
         yield segment
         return
     
-    # vocab에는 seperator가 추가된 애들이 있는건가?
     # lowest = low + est // vocab에 있는 subunit들이 나올 때까지 split 반복
+    # recursive하게 split한 left 부분이 vocab에 있는지 확인, 있으면 그대로 반환하면 됨
     if left + separator in vocab:
         yield left
+    #없다면 더 작은 단위로 recursive하게 다시 분할 진행
     else:
         for item in recursive_split(left, bpe_codes, vocab, separator, False):
             yield item
 
+    #final이 True인 경우, right이 사전에 있는지 확인
+    #final이 False라면, right에 구분자 @@추가해서 vocab에 있는지 확인 -> 없다면 다시 recursive하게 split 진행해야함
     if (final and right in vocab) or (not final and right + separator in vocab):
         yield right
     else:
@@ -267,7 +294,7 @@ def check_vocab_and_split(orig, bpe_codes, vocab, separator):
 
 
 def read_vocabulary(vocab_file, threshold):
-    #vocabulary 읽는 함수 -> 어디에서도 안쓰임
+    #vocabulary 읽는 함수 -> 어디에서도 안쓰이는데 왜 있는지 의문
     """read vocabulary file produced by get_vocab.py, and filter according to frequency threshold.
     """
 
