@@ -7,23 +7,33 @@ from transformer.Layers import EncoderLayer, DecoderLayer
 
 __author__ = "Yu-Hsiang Huang"
 
+"""
+get_pad_mask: 예원
+get_subsequent_mask: 예원
+positional encoding: 예선
+encoder: 예선
+decoder: 다연
+transformer: 예원
+"""
+
 '''
 [pad] 토큰은 모델이 입력으로 받는 <최대길이>보다 길이가 짧은 문장들에 한해 부여되는 토큰
-[pad] 토큰은 실질적인 의미가 없으므로, [pad]토큰 반영 안해주기 위해서 
+[pad] 토큰은 실질적인 의미가 없으므로, attention 연산에 [pad]토큰 반영 안해주기 위해서 
 
 나중에 scaledotproduct에서 쓰임!!!
 '''
 def get_pad_mask(seq, pad_idx):  #패딩된 부분을 마스킹 -> 패딩된 위치에 0을, 패딩되지 않은 위치에 1을 -> 패딩된 곳 연산 안하도록
-    return (seq != pad_idx).unsqueeze(-2)  #두번째 차원에 1추가
+    return (seq != pad_idx).unsqueeze(-2)  #마스크에 차원추가: 뒤에서 두번째 차원에 1추가 -> sequence 차원이 (배치크기, sequence 길이)라면 (배치크기, 1, sequence 길이)
 
 """
-얘가 다음 단어에 대한 마스킹 생성하는 것-> cheating 예방
+다음 단어에 대한 마스킹 생성하는 것-> cheating 예방
+attention 연산 수행할 때 현재 위치 이후의 정보는 사용하지 않도록 하기 위해 사용
 """
 def get_subsequent_mask(seq):
     ''' For masking out the subsequent info. '''
     sz_b, len_s = seq.size()
     #torch.triu: 행렬의 upper triangular matrix 만드는 함수
-    # '1-*' 로 현재있는 0과 1을 뒤집어서 현재 위치 이후를 0으로 만들어줌
+    # '1-*' 로 현재있는 0과 1을 뒤집어서 현재 위치 이후를 0으로 만들어주고 bool()로 마스크를 불리언 형태로 변환
     subsequent_mask = (1 - torch.triu(
         torch.ones((1, len_s, len_s), device=seq.device), diagonal=1)).bool()
     return subsequent_mask
@@ -208,7 +218,7 @@ class Transformer(nn.Module):
             #출력단어의 단어 임베딩 가중치와 디코더의 last layer의 가중치 공유 -> 모델이 효과적으로 문장생성한다고 함
             self.trg_word_prj.weight = self.decoder.trg_word_emb.weight
 
-        if emb_src_tr_weight_sharing:
+        if emb_src_trg_weight_sharing:
             #이번에는 인코더의 input source임베딩과 타겟 단어 임베딩 가중치 공유 -> 인코더와 디코더 사이의 임베딩 공유를 하면 일반화된다고 함
             self.encoder.src_word_emb.weight = self.decoder.trg_word_emb.weight
 
